@@ -1,0 +1,36 @@
+# Archivos de Entorno Virtual
+# No subir las librerías instaladas, cada desarrollador las instala por su cuenta.
+venv/
+env/
+.venv/
+.env/
+
+# Archivos de configuración con secretos y credenciales
+# ¡MUY IMPORTANTE! Nunca subir tus claves.
+.env
+credentials.json
+
+# Archivos de caché y compilados de Python
+# Se generan automáticamente y no son necesarios en el repo.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos de caché del proyecto
+# Como el archivo de caché que discutimos para optimizar costos.
+cache.json
+
+# Archivos de logs
+# Si en el futuro guardas logs, no deben ir al repo.
+*.log
+
+# Carpetas de configuración de IDEs
+# Configuraciones personales de tu editor de código.
+.vscode/
+.idea/
+
+# Archivos de sistema operativo
+# Basura generada por Mac y Windows.
+.DS_Store
+Thumbs.db

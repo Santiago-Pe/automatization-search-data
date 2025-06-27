@@ -1,0 +1,58 @@
+# .github/workflows/2-reusable-deploy.yml
+# Este es nuestro "Workflow Reutilizable". No se puede disparar directamente.
+# Solo se ejecuta cuando otro workflow (como 1-main-pipeline.yml) lo llama.
+
+name: Workflow de Despliegue Reutilizable
+
+# --- TRIGGER REUTILIZABLE ---
+# 'on: workflow_call' define este archivo como una plantilla reutilizable.
+on:
+  workflow_call:
+    # Define los parámetros de entrada (inputs) que este workflow espera recibir.
+    inputs:
+      environment:
+        description: 'El entorno al que se va a desplegar (development, staging, production)'
+        required: true
+        type: string
+
+jobs:
+  # --- JOB DE PRUEBAS ---
+  test:
+    name: 🧪 Pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - name: Imprimir mensaje de prueba
+        run: |
+          echo "Hola Mundo desde el job de 'test' para el entorno: ${{ inputs.environment }}"
+          echo "Aquí irían los comandos como 'npm test' o similar."
+          
+  # --- JOB DE CONSTRUCCIÓN ---
+  build:
+    name: 🏗️ Construcción
+    runs-on: ubuntu-latest
+    # Este job necesita que el job 'test' haya terminado exitosamente.
+    needs: test
+    steps:
+      - name: Imprimir mensaje de construcción
+        run: |
+          echo "Hola Mundo desde el job de 'build' para el entorno: ${{ inputs.environment }}"
+          echo "Aquí irían los comandos como 'npm run build' o 'docker build'."
+
+  # --- JOB DE DESPLIEGUE ---
+  deploy:
+    name: 🚀 Despliegue
+    runs-on: ubuntu-latest
+    # Este job necesita que el job 'build' haya terminado exitosamente.
+    needs: build
+    
+    # Asigna este job a un "Entorno" de GitHub. Esto te da protección
+    # y visibilidad en la sección de "Environments" de tu repositorio.
+    environment: 
+      name: ${{ inputs.environment }}
+      
+    steps:
+      - name: Imprimir mensaje de despliegue
+        run: |
+          echo "Hola Mundo desde el job de 'deploy' para el entorno: ${{ inputs.environment }}"
+          echo "Aquí irían los comandos de despliegue a GCP, AWS, etc."
+
