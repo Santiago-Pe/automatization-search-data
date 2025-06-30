@@ -1,56 +1,76 @@
 # main.py
 import time
 import pandas as pd
-from sheets_handler import leer_datos_de_entrada, escribir_resultados_en_sheet
-from search_services import buscar_info_en_google_maps, buscar_url_oficial_fallback
-from scraper import extraer_info_de_pagina
+from sheets_handler import read_input_data, write_results_to_sheet
+from search_services import search_web_fallback, search_google_maps
+from scraper import scrape_contact_info
 
 def main():
-    """Función principal que orquesta todo el proceso de principio a fin."""
+    """
+    Función principal que orquesta todo el proceso de principio a fin.
+    """
     print("\n--- Inicio del Proceso de Enriquecimiento ---")
+    
+    # Llama a la función de lectura para obtener las empresas pendientes.
+    companies_df = read_input_data()
 
-    df_empresas = leer_datos_de_entrada()
-    if df_empresas.empty:
-        print("No hay empresas para procesar. Finalizando.")
+    # Verifica si hay trabajo que hacer.
+    if companies_df.empty:
+        print("\n[RESULTADO] No se encontraron empresas pendientes para procesar. Finalizando el programa.")
         return
+    else:
+        print("\n[RESULTADO] Empresas pendientes encontradas. Iniciando el bucle de procesamiento...")
 
-    resultados_finales = []
-    # Mantenemos el modo de prueba para procesar solo 1 elemento.
-    # Quita el .head(1) para procesar todo el archivo.
-    for index, row in df_empresas.head(1).iterrows():
-        nombre = row.get('nombre_establecimiento', '')
-        pais = row.get('pais', '')
-        query = f"{nombre} {pais}".strip()
-        print(f"\n[+] Procesando empresa: '{nombre}' (Fila: {row['sheet_row_number']})")
-
-        # Lógica de búsqueda multi-capa
-        url_final, telefono_final = buscar_info_en_google_maps(query)
-        if not url_final:
-            url_final = buscar_url_oficial_fallback(query)
-
-        email_scrapeado, telefono_scrapeado = extraer_info_de_pagina(url_final)
-
-        # Consolidar resultados: priorizar datos de Maps, luego de scraping.
-        email_final = email_scrapeado
-        if not telefono_final:
-            telefono_final = telefono_scrapeado
-
-        print(f"  -> Resumen: URL={url_final}, Email={email_final}, Tel={telefono_final}")
-
-        resultados_finales.append({
+    final_results = []
+    # Mantenemos el modo de prueba procesando solo el primer elemento.
+    # Para procesar todo, quita el `.head(1)`.
+    for index, row in companies_df.iterrows():
+        # Extrae los datos de la fila actual.
+        company_name = row.get('nombre_establecimiento', '')
+        country = row.get('pais', '')
+        search_query = f"{company_name} {country}".strip()
+        print(f"\n[+] Procesando empresa: '{company_name}' (Fila: {row['sheet_row_number']})")
+        
+        # --- Lógica de Búsqueda Multi-Capa ---
+        
+        # Plan A: Buscar en Google Maps para obtener la máxima cantidad de datos estructurados.
+        final_url, phone_list, final_maps_url, final_lat, final_lng = search_google_maps(search_query)
+        
+        # Plan B: Si Maps no dio una URL, usar el fallback de la búsqueda web.
+        if not final_url:
+            final_url = search_web_fallback(search_query)
+        
+        # Plan C: Si tenemos una URL (de cualquier fuente), la analizamos para buscar más datos.
+        scraped_email, scraped_phone = scrape_contact_info(final_url)
+        
+        # --- Consolidación de Resultados ---
+        final_email = scraped_email
+        # Si la lista de teléfonos de Maps está vacía, usamos el del scraping como respaldo.
+        if not phone_list and scraped_phone:
+            phone_list.append(scraped_phone)
+        
+        print(f"  -> Resumen de Búsqueda: URL={final_url}, Email={final_email}, Teléfonos={phone_list}")
+        
+        # Añadimos los resultados finales a una lista.
+        final_results.append({
             'sheet_row_number': row['sheet_row_number'],
-            'url_final': url_final,
-            'email_final': email_final,
-            'telefono_final': telefono_final
+            'url_final': final_url,
+            'email_final': final_email,
+            'phone_list': phone_list,
+            'maps_url_final': final_maps_url,
+            'lat_final': final_lat,
+            'lng_final': final_lng
         })
+        
+        time.sleep(1) # Pausa educada entre peticiones.
 
-        time.sleep(1) # Pausa educada
-
-    if resultados_finales:
-        df_resultados = pd.DataFrame(resultados_finales)
-        escribir_resultados_en_sheet(df_resultados)
+    # Si se procesaron empresas, se escriben los resultados.
+    if final_results:
+        results_df = pd.DataFrame(final_results)
+        write_results_to_sheet(results_df)
 
     print("\n--- Proceso completado. ---")
+
 
 if __name__ == "__main__":
     main()
