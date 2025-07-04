@@ -18,11 +18,11 @@ jobs:
   # Este único job determina el entorno y llama a la plantilla.
   call-reusable-workflow:
     name: Despachar a Workflow Reutilizable
-    
+
     # Aquí se utiliza el workflow reutilizable. La sintaxis es {owner}/{repo}/.github/workflows/{nombre_archivo}@{ref}
     # Usamos 'uses: ./.github/workflows/2-reusable-deploy.yml' como atajo para llamar a un workflow en el mismo repositorio.
     uses: ./.github/workflows/2-reusable-deploy.yml
-    
+
     # Le pasamos parámetros (inputs) al workflow reutilizable.
     with:
       # Determinamos el nombre del entorno dinámicamente según la rama que disparó el pipeline.
@@ -30,8 +30,7 @@ jobs:
       # Si la rama es 'stage', el entorno es 'staging'.
       # En cualquier otro caso (dev), el entorno es 'development'.
       environment: ${{ (github.ref_name == 'main' && 'production') || (github.ref_name == 'stage' && 'staging') || 'development' }}
-      
+
     # 'secrets: inherit' permite que el workflow reutilizable acceda a los secrets configurados en el repositorio.
     # Es una buena práctica de seguridad ser explícito con esto.
     secrets: inherit
-

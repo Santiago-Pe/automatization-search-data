@@ -15,6 +15,7 @@ HTTP_SESSION = requests.Session()
 # Funciones Auxiliares (Helpers)
 # ===================================================================
 
+
 def _get_place_details(place_id):
     """
     Función auxiliar que toma un Place ID y devuelve los detalles de ese lugar.
@@ -22,16 +23,18 @@ def _get_place_details(place_id):
     # Define los campos específicos que queremos de la API de Place Details.
     fields = "website,formatted_phone_number,url,geometry"
     details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields={fields}&key={GOOGLE_API_KEY}"
-    
+
     response = requests.get(details_url, timeout=10)
     response.raise_for_status()  # Lanza un error si la petición HTTP falla.
-    
+
     data = response.json()
-    return data.get('result', {}) if data.get('status') == 'OK' else None
+    return data.get("result", {}) if data.get("status") == "OK" else None
+
 
 # ===================================================================
 # Funciones Principales de Búsqueda
 # ===================================================================
+
 
 def search_google_maps(query):
     """
@@ -44,14 +47,14 @@ def search_google_maps(query):
         response.raise_for_status()
         data = response.json()
 
-        if data['status'] != 'OK' or not data.get('candidates'):
+        if data["status"] != "OK" or not data.get("candidates"):
             print("  -> No se encontraron candidatos en Google Maps.")
             return None, [], None, None, None
 
         # Obtener detalles para los primeros 3 candidatos
         detailed_candidates = []
-        for candidate in data['candidates'][:3]:
-            details = _get_place_details(candidate['place_id'])
+        for candidate in data["candidates"][:3]:
+            details = _get_place_details(candidate["place_id"])
             if details:
                 detailed_candidates.append(details)
 
@@ -60,25 +63,25 @@ def search_google_maps(query):
 
         # Estrategia: El "mejor" candidato es el primero con más datos.
         best_candidate = detailed_candidates[0]
-        website = best_candidate.get('website')
-        maps_url = best_candidate.get('url')
-        lat = best_candidate.get('geometry', {}).get('location', {}).get('lat')
-        lng = best_candidate.get('geometry', {}).get('location', {}).get('lng')
+        website = best_candidate.get("website")
+        maps_url = best_candidate.get("url")
+        lat = best_candidate.get("geometry", {}).get("location", {}).get("lat")
+        lng = best_candidate.get("geometry", {}).get("location", {}).get("lng")
 
         # Recopilar hasta 3 teléfonos únicos de TODOS los candidatos.
         phone_list = []
         for candidate in detailed_candidates:
-            phone = candidate.get('formatted_phone_number')
+            phone = candidate.get("formatted_phone_number")
             if phone and phone not in phone_list:
                 phone_list.append(phone)
-        
+
         return website, phone_list, maps_url, lat, lng
 
     except requests.exceptions.RequestException as e:
         print(f"  -> Error de red en API de Maps: {e}")
     except Exception as e:
         print(f"  -> Error inesperado en API de Maps: {e}")
-    
+
     return None, [], None, None, None
 
 
@@ -96,13 +99,17 @@ def search_web_fallback(query):
     try:
         # Construye el servicio de Google API.
         service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
-        
+
         # Ejecuta la búsqueda pidiendo solo el primer resultado.
         response = service.cse().list(q=query, cx=CX_ID, num=1).execute()
-        
+
         # Devuelve el enlace si existe en la respuesta.
-        return response['items'][0]['link'] if 'items' in response and response['items'] else None
-        
+        return (
+            response["items"][0]["link"]
+            if "items" in response and response["items"]
+            else None
+        )
+
     except Exception as e:
         print(f"  -> Error en API de Custom Search: {e}")
         return None

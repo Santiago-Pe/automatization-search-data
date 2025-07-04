@@ -2,6 +2,7 @@
 from bs4 import BeautifulSoup
 from scraper import _buscar_datos_en_soup
 
+
 def test_encontrar_email_y_telefono():
     """
     Prueba que la función extrae correctamente un email y un teléfono de un HTML simple.
@@ -15,14 +16,15 @@ def test_encontrar_email_y_telefono():
         </body>
     </html>
     """
-    soup = BeautifulSoup(html_falso, 'html.parser')
-    
+    soup = BeautifulSoup(html_falso, "html.parser")
+
     # 2. Actuación (Act): Ejecutamos la función que queremos probar
     email, telefono = _buscar_datos_en_soup(soup)
-    
+
     # 3. Afirmación (Assert): Verificamos que los resultados son los esperados
     assert email == "info@ejemplo.com"
     assert telefono == "(555) 123-4567"
+
 
 def test_no_encontrar_datos():
     """
@@ -30,11 +32,11 @@ def test_no_encontrar_datos():
     """
     # Arrange
     html_falso = "<p>Esta es una página sin información de contacto.</p>"
-    soup = BeautifulSoup(html_falso, 'html.parser')
-    
+    soup = BeautifulSoup(html_falso, "html.parser")
+
     # Act
     email, telefono = _buscar_datos_en_soup(soup)
-    
+
     # Assert
     assert email is None
     assert telefono is None

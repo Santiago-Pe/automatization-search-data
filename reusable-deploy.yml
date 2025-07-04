@@ -25,7 +25,7 @@ jobs:
         run: |
           echo "Hola Mundo desde el job de 'test' para el entorno: ${{ inputs.environment }}"
           echo "Aquí irían los comandos como 'npm test' o similar."
-          
+
   # --- JOB DE CONSTRUCCIÓN ---
   build:
     name: 🏗️ Construcción
@@ -44,15 +44,14 @@ jobs:
     runs-on: ubuntu-latest
     # Este job necesita que el job 'build' haya terminado exitosamente.
     needs: build
-    
+
     # Asigna este job a un "Entorno" de GitHub. Esto te da protección
     # y visibilidad en la sección de "Environments" de tu repositorio.
-    environment: 
+    environment:
       name: ${{ inputs.environment }}
-      
+
     steps:
       - name: Imprimir mensaje de despliegue
         run: |
           echo "Hola Mundo desde el job de 'deploy' para el entorno: ${{ inputs.environment }}"
           echo "Aquí irían los comandos de despliegue a GCP, AWS, etc."
-
