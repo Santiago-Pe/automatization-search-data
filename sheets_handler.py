@@ -162,11 +162,13 @@ def read_input_data():
     Lee los datos de Google Sheets, añade el número de fila
     y devuelve las empresas pendientes como un DataFrame.
     """
+    # Obtengo la hoja de google sheet
     worksheet = setup_google_sheets_client()
     if worksheet is None:
         return pd.DataFrame()
 
     try:
+        # Nota: de donde sale get_all_records (estimo de es una fn de google)
         all_data = worksheet.get_all_records()
         if not all_data:
             print("La hoja parece estar vacía.")
@@ -205,7 +207,6 @@ def write_results_to_sheet(df_resultados):
         headers = worksheet.row_values(1)
         col_map = {header: i + 1 for i, header in enumerate(headers)}
 
-        # Lista de columnas requeridas, incluyendo las nuevas
         required_cols = [
             "url_encontrada",
             "email_encontrado",
