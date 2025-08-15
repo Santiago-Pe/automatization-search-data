@@ -1,105 +1,119 @@
 # scraper.py
+import os
+import json
 import requests
 import re
+import random
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from config import USER_AGENTS
+import google.generativeai as genai
 
-# ===================================================================
-# Configuración del Módulo
-# ===================================================================
-
-# Se crea una única sesión de requests para reutilizar la conexión.
+# --- Configuración del Módulo ---
 HTTP_SESSION = requests.Session()
-# Definimos un User-Agent por defecto para simular un navegador.
-HTTP_SESSION.headers.update(
-    {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-)
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# ===================================================================
-# Funciones Auxiliares (Helpers)
-# ===================================================================
+# --- Funciones de Extracción ---
 
 
-def _extract_data_from_soup(soup):
+def _extract_with_regex(text):
+    """Extrae emails y teléfonos usando expresiones regulares."""
+    emails = re.findall(r"[\w\.-]+@[\w\.-]+\.\w+", text)
+    phones = re.findall(r"\(?\+?\d[\d\s\-\(\)]{7,}\d", text)
+
+    # Limpieza básica
+    cleaned_phones = [re.sub(r"\s+", " ", p).strip() for p in phones]
+
+    return list(set(emails)), list(set(cleaned_phones))
+
+
+def _extract_with_gemini(text):
+    """Usa Gemini para extraer datos complejos si regex falla."""
+    print("    -> Usando IA (Gemini) para análisis de texto profundo...")
+    try:
+        # Truncamos el texto para no exceder los límites de la API y ahorrar costos
+        max_chars = 15000
+        truncated_text = text[:max_chars]
+
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        prompt = (
+            "Analiza el siguiente texto de un sitio web y extrae la dirección física principal y el número de teléfono de contacto principal. "
+            'Devuelve el resultado en formato JSON: {"direccion": "...", "telefono": "..."}. Si no encuentras un dato, usa null.'
+            f"\n\nTEXTO:\n{truncated_text}"
+        )
+        response = model.generate_content(prompt)
+        # Limpieza para asegurar que sea un JSON válido
+        cleaned_response = response.text.strip().replace("`", "").replace("json", "")
+        return json.loads(cleaned_response)
+    except Exception as e:
+        print(f"    -> Error en extracción con Gemini: {e}")
+        return {}
+
+
+# --- Función Principal ---
+
+
+def scrape_website(url):
     """
-    Función auxiliar que busca un email y un teléfono en un objeto BeautifulSoup.
-    """
-    email = None
-    phone = None
-
-    # Búsqueda de Email: Prioriza enlaces 'mailto:', luego busca con RegEx.
-    mailto_link = soup.find("a", href=re.compile(r"^mailto:"))
-    if mailto_link:
-        email = mailto_link["href"].replace("mailto:", "").strip()
-    else:
-        email_regex = re.compile(r"[\w\.-]+@[\w\.-]+\.\w+")
-        email_match = email_regex.search(soup.get_text())
-        if email_match:
-            email = email_match.group(0)
-
-    # Búsqueda de Teléfono: Usa RegEx para encontrar secuencias de números.
-    phone_regex = re.compile(r"\(?\+?\d[\d\s\-\(\)]{7,}\d")
-    phone_match = phone_regex.search(soup.get_text())
-    if phone_match:
-        phone = phone_match.group(0).strip()
-
-    return email, phone
-
-
-# ===================================================================
-# Función Principal de Scraping
-# ===================================================================
-
-
-def scrape_contact_info(url):
-    """
-    Visita una URL, busca una página de 'Contacto' y extrae el email y teléfono.
-
-    Args:
-        url (str): La URL del sitio web a analizar.
-
-    Returns:
-        tuple: (email, phone) o (None, None) si no se encuentran datos.
+    Orquesta el proceso de scraping: descarga, extrae con regex y, si es necesario, con IA.
     """
     if not url:
-        return None, None
+        return {}
 
-    print(f"  Analizando página en busca de datos: {url}")
+    print(f"  -> Plan C (Análisis Profundo): Scrapeando {url}")
     try:
-        response = HTTP_SESSION.get(url, timeout=15)
+        # Rotación de User-Agent
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
+        response = HTTP_SESSION.get(url, timeout=15, headers=headers)
         response.raise_for_status()
 
-        main_soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        # Estrategia: Busca un enlace a una página de "Contacto".
+        # Primero, intentar encontrar una página de contacto para un análisis más enfocado
         contact_regex = re.compile(r"contact", re.IGNORECASE)
-        contact_link = main_soup.find("a", href=True, string=contact_regex)
-        if not contact_link:
-            contact_link = main_soup.find("a", href=contact_regex)
-
-        # Si encuentra una página de contacto, la analiza prioritariamente.
+        contact_link = soup.find("a", href=contact_regex)
         if contact_link:
             contact_url = urljoin(url, contact_link["href"])
-            print(f"  -> Página de contacto encontrada, analizándola: {contact_url}")
             try:
-                contact_response = HTTP_SESSION.get(contact_url, timeout=15)
-                contact_response.raise_for_status()
-                contact_soup = BeautifulSoup(contact_response.text, "html.parser")
-                email, phone = _extract_data_from_soup(contact_soup)
-                # Si encuentra algo en la página de contacto, lo devuelve.
-                if email or phone:
-                    return email, phone
-            except requests.exceptions.RequestException as e:
-                print(f"  -> No se pudo acceder a la página de contacto: {e}")
+                contact_response = HTTP_SESSION.get(
+                    contact_url, timeout=15, headers=headers
+                )
+                if contact_response.ok:
+                    soup = BeautifulSoup(contact_response.text, "html.parser")
+                    print(
+                        f"    -> Análisis enfocado en la página de contacto: {contact_url}"
+                    )
+            except requests.RequestException:
+                pass  # Si falla, continuamos con la página principal
 
-        # Si no, busca en la página principal como último recurso.
-        return _extract_data_from_soup(main_soup)
+        page_text = soup.get_text()
 
-    except requests.exceptions.RequestException as e:
-        print(f"  -> Error al acceder a la URL para scraping: {e}")
-        return None, None
+        # 1. Extracción rápida con Regex
+        emails, regex_phones = _extract_with_regex(page_text)
+
+        scraped_data = {
+            "EMAIL": emails[0] if emails else None,
+            "TELEFONO_2": regex_phones[0] if len(regex_phones) > 0 else None,
+            "TELEFONO_3": regex_phones[1] if len(regex_phones) > 1 else None,
+        }
+
+        # 2. Si faltan datos clave, usamos la IA como respaldo
+        if not scraped_data.get(
+            "TELEFONO_2"
+        ):  # Asumimos que el teléfono principal puede estar aquí
+            gemini_data = _extract_with_gemini(page_text)
+            # Integramos los resultados de Gemini, sin sobreescribir lo que ya encontramos
+            if gemini_data.get("telefono") and not scraped_data.get("TELEFONO_2"):
+                scraped_data["TELEFONO_2"] = gemini_data["telefono"]
+            # Podríamos también extraer la dirección aquí si fuera necesario
+            # if gemini_data.get("direccion"):
+            #     scraped_data["DIRECCION"] = gemini_data["direccion"]
+
+        return {k: v for k, v in scraped_data.items() if v is not None}
+
+    except requests.RequestException as e:
+        print(f"  -> Error de red durante el scraping: {e}")
+        return {"ERROR": str(e)}
     except Exception as e:
         print(f"  -> Error inesperado durante el scraping: {e}")
-        return None, None
+        return {"ERROR": str(e)}
