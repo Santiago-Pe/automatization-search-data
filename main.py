@@ -2,87 +2,86 @@
 import time
 import pandas as pd
 from sheets_handler import read_input_data, write_results_to_sheet
-from search_services import search_web_fallback, search_google_maps
-from scraper import scrape_contact_info
+from search_services import (
+    find_url_with_gemini,
+    find_url_with_custom_search,
+    get_places_data_fallback,
+)
+from scraper import scrape_website
+from config import PROCESSING_LIMIT
 
 
 def main():
     """
-    Función principal que orquesta todo el proceso de principio a fin.
+    Orquesta el proceso de enriquecimiento siguiendo la cascada de costo cero.
     """
-    print("\n--- Inicio del Proceso de Enriquecimiento ---")
+    start_time = time.time()
 
-    # Llama a la función de lectura para obtener las empresas pendientes.
+    print("\n--- Inicio del Proceso de Enriquecimiento (Flujo Óptimo) ---")
     companies_df = read_input_data()
 
-    # Verifica si hay trabajo que hacer.
     if companies_df.empty:
-        print(
-            "\n[RESULTADO] No se encontraron empresas pendientes para procesar. Finalizando el programa."
-        )
+        print("\n[RESULTADO] No se encontraron empresas pendientes.")
         return
-    else:
-        print(
-            "\n[RESULTADO] Empresas pendientes encontradas. Iniciando el bucle de procesamiento..."
-        )
 
-    final_results = []
-    # Mantenemos el modo de prueba procesando solo el primer elemento.
-    # Para procesar todo, quita el `.head(1)`.
-    for index, row in companies_df.iterrows():
-        # Extrae los datos de la fila actual.
-        company_name = row.get("nombre_establecimiento", "")
-        country = row.get("pais", "")
-        search_query = f"{company_name} {country}".strip()
-        print(
-            f"\n[+] Procesando empresa: '{company_name}' (Fila: {row['sheet_row_number']})"
-        )
+    companies_to_process = companies_df.head(PROCESSING_LIMIT)
+    print(
+        f"Aplicando límite de procesamiento: se procesarán un máximo de {len(companies_to_process)} filas."
+    )
 
-        # --- Lógica de Búsqueda Multi-Capa ---
+    all_results = []
+    for index, row in companies_to_process.iterrows():
+        result_data = {"sheet_row_number": row["sheet_row_number"]}
 
-        # Plan A: Buscar en Google Maps para obtener la máxima cantidad de datos estructurados.
-        final_url, phone_list, final_maps_url, final_lat, final_lng = (
-            search_google_maps(search_query)
-        )
+        # ### CAMBIO: Leemos la columna PAIS para usarla en las búsquedas ###
+        # Usamos .get() para evitar errores si la columna no existe o está vacía
+        nombre = row.get("NOMBRE_ESTABLECIMIENTO") or row.get("NOMBRE_COMERCIAL")
+        pais = row.get("PAIS", "Argentina")  # Usamos "Argentina" como valor por defecto
 
-        # Plan B: Si Maps no dio una URL, usar el fallback de la búsqueda web.
-        if not final_url:
-            final_url = search_web_fallback(search_query)
+        # Priorizamos CUIT como la mejor llave de búsqueda si existe
+        query = row.get("CUIT") or f"{nombre} {pais}"
 
-        # Plan C: Si tenemos una URL (de cualquier fuente), la analizamos para buscar más datos.
-        scraped_email, scraped_phone = scrape_contact_info(final_url)
+        # Convert query to string and check if it's valid
+        if not query or not str(query).strip():
+            print(
+                f"\n[!] Saltando Fila: {row['sheet_row_number']} (sin datos de entrada válidos)"
+            )
+            continue
 
-        # --- Consolidación de Resultados ---
-        final_email = scraped_email
-        # Si la lista de teléfonos de Maps está vacía, usamos el del scraping como respaldo.
-        if not phone_list and scraped_phone:
-            phone_list.append(scraped_phone)
+        print(f"\n[+] Procesando: '{query}' (Fila: {row['sheet_row_number']})")
 
-        print(
-            f"  -> Resumen de Búsqueda: URL={final_url}, Email={final_email}, Teléfonos={phone_list}"
-        )
+        # 2. Cascada para obtener la URL
+        # Usamos la query construida para las búsquedas
+        url = find_url_with_gemini(str(query))
+        if not url:
+            url = find_url_with_custom_search(str(query))
 
-        # Añadimos los resultados finales a una lista.
-        final_results.append(
-            {
-                "sheet_row_number": row["sheet_row_number"],
-                "url_final": final_url,
-                "email_final": final_email,
-                "phone_list": phone_list,
-                "maps_url_final": final_maps_url,
-                "lat_final": final_lat,
-                "lng_final": final_lng,
-            }
-        )
+        # ### CAMBIO: Guardamos la URL encontrada en la columna WEB ###
+        result_data["WEB"] = url
 
-        time.sleep(1)  # Pausa educada entre peticiones.
+        # 3. Scrapeo del sitio web (si se encontró URL)
+        scraped_data = scrape_website(url)
+        result_data.update(scraped_data)
 
-    # Si se procesaron empresas, se escriben los resultados.
-    if final_results:
-        results_df = pd.DataFrame(final_results)
+        # 4. Último recurso: Google Places
+        if not result_data.get("TELEFONO") and not result_data.get("TELEFONO_2"):
+            # Usamos la query más completa para Places
+            places_query = f"{nombre} {row.get('LOCALIDAD', '')} {row.get('PROVINCIA', '')}".strip()
+            places_data = get_places_data_fallback(places_query)
+            for key, value in places_data.items():
+                if key not in result_data or result_data[key] is None:
+                    result_data[key] = value
+
+        all_results.append(result_data)
+        time.sleep(2)
+
+    if all_results:
+        results_df = pd.DataFrame(all_results)
         write_results_to_sheet(results_df)
 
-    print("\n--- Proceso completado. ---")
+    end_time = time.time()
+    total_time = end_time - start_time
+    print(f"\n--- Proceso completado en {total_time:.2f} segundos. ---")
 
 
 if __name__ == "__main__":

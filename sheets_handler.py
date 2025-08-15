@@ -2,199 +2,64 @@
 import gspread
 import pandas as pd
 import datetime
-from config import SHEET_NAME
-
-
-# ===================================================================
-# Funciones Auxiliares (Helpers)
-# ===================================================================
-def _get_column_map(worksheet):
-    """
-    Obtiene y valida el mapeo de los nombres de columna a sus índices numéricos.
-    """
-    headers = worksheet.row_values(1)
-    column_map = {header: i + 1 for i, header in enumerate(headers)}
-
-    # AÑADIMOS LAS NUEVAS COLUMNAS REQUERIDAS
-    required_cols = [
-        "url_encontrada",
-        "email_encontrado",
-        "telefono_encontrado",
-        "telefono_2",
-        "telefono_3",
-        "google_maps_url",
-        "latitud",
-        "longitud",
-        "estado",
-        "fecha_actualizacion",
-    ]
-    for col in required_cols:
-        if col not in column_map:
-            print(
-                f"ADVERTENCIA: La columna requerida '{col}' no se encuentra en tu Google Sheet. No se podrá actualizar."
-            )
-
-    return column_map
-
-
-def _prepare_batch_update_list(results_df, column_map):
-    """Prepara la lista de objetos gspread.Cell que se deben actualizar en lote."""
-    cells_to_update = []
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    for _, row in results_df.iterrows():
-        sheet_row_index = int(row["sheet_row_number"])
-
-        # --- Lógica de escritura de datos básicos ---
-        if pd.notna(row["url_final"]) and "url_encontrada" in column_map:
-            cells_to_update.append(
-                gspread.Cell(
-                    row=sheet_row_index,
-                    col=column_map["url_encontrada"],
-                    value=row["url_final"],
-                )
-            )
-        if pd.notna(row["email_final"]) and "email_encontrado" in column_map:
-            cells_to_update.append(
-                gspread.Cell(
-                    row=sheet_row_index,
-                    col=column_map["email_encontrado"],
-                    value=row["email_final"],
-                )
-            )
-
-        # --- NUEVA LÓGICA PARA MÚLTIPLES TELÉFONOS ---
-        # El `phone_list` es una lista de teléfonos que viene de los resultados.
-        phone_list = row.get("phone_list", [])
-        if phone_list:
-            # Asigna el primer teléfono a la columna principal.
-            if "telefono_encontrado" in column_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row_index,
-                        col=column_map["telefono_encontrado"],
-                        value=phone_list[0],
-                    )
-                )
-            # Asigna el segundo teléfono si existe.
-            if len(phone_list) > 1 and "telefono_2" in column_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row_index,
-                        col=column_map["telefono_2"],
-                        value=phone_list[1],
-                    )
-                )
-            # Asigna el tercer teléfono si existe.
-            if len(phone_list) > 2 and "telefono_3" in column_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row_index,
-                        col=column_map["telefono_3"],
-                        value=phone_list[2],
-                    )
-                )
-
-        # --- NUEVA LÓGICA PARA DATOS DE GEOLOCALIZACIÓN ---
-        if pd.notna(row["maps_url_final"]) and "google_maps_url" in column_map:
-            cells_to_update.append(
-                gspread.Cell(
-                    row=sheet_row_index,
-                    col=column_map["google_maps_url"],
-                    value=row["maps_url_final"],
-                )
-            )
-        if pd.notna(row["lat_final"]) and "latitud" in column_map:
-            cells_to_update.append(
-                gspread.Cell(
-                    row=sheet_row_index,
-                    col=column_map["latitud"],
-                    value=str(row["lat_final"]),
-                )
-            )
-        if pd.notna(row["lng_final"]) and "longitud" in column_map:
-            cells_to_update.append(
-                gspread.Cell(
-                    row=sheet_row_index,
-                    col=column_map["longitud"],
-                    value=str(row["lng_final"]),
-                )
-            )
-
-        # --- Lógica de estado y fecha ---
-        if "estado" in column_map:
-            cells_to_update.append(
-                gspread.Cell(
-                    row=sheet_row_index, col=column_map["estado"], value="BUSCADO"
-                )
-            )
-        if "fecha_actualizacion" in column_map:
-            cells_to_update.append(
-                gspread.Cell(
-                    row=sheet_row_index,
-                    col=column_map["fecha_actualizacion"],
-                    value=current_date,
-                )
-            )
-
-    return cells_to_update
-
+from config import SHEET_NAME, SHEET_INDEX
 
 # ===================================================================
-# FUNCIONES DE CONEXIÓN
+# FUNCIONES DE CONEXIÓN Y LECTURA
 # ===================================================================
+
+
 def setup_google_sheets_client():
     """Autentica y devuelve un cliente para interactuar con Google Sheets."""
     try:
         gc = gspread.service_account(filename="credentials.json")
         spreadsheet = gc.open(SHEET_NAME)
-        return spreadsheet.sheet1  ## retorno la primera hoja del documento
+        worksheet = spreadsheet.get_worksheet(SHEET_INDEX)
+        print(f"Trabajando con la hoja: '{worksheet.title}' (Índice: {SHEET_INDEX})")
+        return worksheet
     except Exception as e:
         print(f"ERROR al conectar con Google Sheets: {e}")
         return None
 
 
-# ===================================================================
-# FUNCIONES DE LECTURA
-# ===================================================================
 def read_input_data():
     """
-    Lee los datos de Google Sheets, añade el número de fila
-    y devuelve las empresas pendientes como un DataFrame.
+    Lee los datos de Google Sheets y devuelve las empresas pendientes.
     """
-    # Obtengo la hoja de google sheet
     worksheet = setup_google_sheets_client()
     if worksheet is None:
         return pd.DataFrame()
 
     try:
-        # Nota: de donde sale get_all_records (estimo de es una fn de google)
+        print("Leyendo datos desde Google Sheets...")
         all_data = worksheet.get_all_records()
         if not all_data:
-            print("La hoja parece estar vacía.")
+            print("La hoja de cálculo parece estar vacía.")
             return pd.DataFrame()
 
         df = pd.DataFrame(all_data)
         df["sheet_row_number"] = df.index + 2
 
-        if "estado" not in df.columns:
-            df["estado"] = ""
+        if "ESTADO" not in df.columns:
+            df["ESTADO"] = "PENDIENTE"
 
-        df["estado"] = df["estado"].fillna("")
-        pending_companies = df[df["estado"] == ""].copy()
+        df["ESTADO"] = df["ESTADO"].fillna("").str.upper()
+        pending_companies = df[df["ESTADO"] != "COMPLETADO"].copy()
 
-        print(f"Se encontraron {len(pending_companies)} empresas para procesar.")
+        print(f"Se encontraron {len(pending_companies)} empresas pendientes en total.")
         return pending_companies
 
     except Exception as e:
-        print(f"Ocurrió un error al leer o procesar los datos: {e}")
+        print(f"Ocurrió un error al leer o procesar los datos de la hoja: {e}")
         return pd.DataFrame()
 
 
 # ===================================================================
 # FUNCIÓN DE ESCRITURA
 # ===================================================================
-def write_results_to_sheet(df_resultados):
+
+
+def write_results_to_sheet(results_df):
     """
     Toma un DataFrame con los resultados y actualiza la hoja de Google Sheets en un solo lote.
     """
@@ -207,98 +72,56 @@ def write_results_to_sheet(df_resultados):
         headers = worksheet.row_values(1)
         col_map = {header: i + 1 for i, header in enumerate(headers)}
 
-        required_cols = [
-            "url_encontrada",
-            "email_encontrado",
-            "telefono_encontrado",
-            "estado",
-            "fecha_actualizacion",
-            "google_maps_url",
-            "latitud",
-            "longitud",
-        ]
-        for col in required_cols:
-            if col not in col_map:
-                print(
-                    f"ADVERTENCIA: La columna '{col}' no se encuentra en tu Google Sheet. No se podrá actualizar."
-                )
-
         cells_to_update = []
-        fecha_actual = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        for index, row in df_resultados.iterrows():
-            sheet_row = int(row["sheet_row_number"])
-            # Actualiza los campos existentes
-            if pd.notna(row["url_final"]) and "url_encontrada" in col_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row,
-                        col=col_map["url_encontrada"],
-                        value=row["url_final"],
-                    )
-                )
-            if pd.notna(row["email_final"]) and "email_encontrado" in col_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row,
-                        col=col_map["email_encontrado"],
-                        value=row["email_final"],
-                    )
-                )
+        for _, row in results_df.iterrows():
+            sheet_row_index = int(row["sheet_row_number"])
 
-            # Asigna el primer teléfono a la columna principal
-            phone_list = row.get("phone_list", [])
-            if phone_list and "telefono_encontrado" in col_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row,
-                        col=col_map["telefono_encontrado"],
-                        value=phone_list[0],
-                    )
-                )
+            # ### CAMBIO: Se añade 'WEB' al mapeo de escritura ###
+            key_to_col_name = {
+                "WEB": "WEB",
+                "EMAIL": "EMAIL",
+                "TELEFONO": "TELEFONO",
+                "TELEFONO_2": "TELEFONO_2",
+                "TELEFONO_3": "TELEFONO_3",
+                "URL_Gmaps": "URL_Gmaps",
+                "LATITUD": "LATITUD",
+                "LONGITUD": "LONGITUD",
+                "NOMBRE_COMERCIAL": "NOMBRE_COMERCIAL",
+                "DIRECCION": "DIRECCION",
+            }
 
-            # Actualiza los nuevos campos de Google Maps
-            if pd.notna(row["maps_url_final"]) and "google_maps_url" in col_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row,
-                        col=col_map["google_maps_url"],
-                        value=row["maps_url_final"],
+            for key, col_name in key_to_col_name.items():
+                if pd.notna(row.get(key)) and col_name in col_map:
+                    cells_to_update.append(
+                        gspread.Cell(
+                            row=sheet_row_index,
+                            col=col_map[col_name],
+                            value=str(row[key]),
+                        )
                     )
-                )
-            if pd.notna(row["lat_final"]) and "latitud" in col_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row,
-                        col=col_map["latitud"],
-                        value=str(row["lat_final"]),
-                    )
-                )
-            if pd.notna(row["lng_final"]) and "longitud" in col_map:
-                cells_to_update.append(
-                    gspread.Cell(
-                        row=sheet_row,
-                        col=col_map["longitud"],
-                        value=str(row["lng_final"]),
-                    )
-                )
 
-            # Actualiza el estado y la fecha
-            if "estado" in col_map:
-                cells_to_update.append(
-                    gspread.Cell(row=sheet_row, col=col_map["estado"], value="BUSCADO")
-                )
-            if "fecha_actualizacion" in col_map:
+            if "ESTADO" in col_map:
                 cells_to_update.append(
                     gspread.Cell(
-                        row=sheet_row,
-                        col=col_map["fecha_actualizacion"],
-                        value=fecha_actual,
+                        row=sheet_row_index, col=col_map["ESTADO"], value="COMPLETADO"
+                    )
+                )
+            if "FECHA_ACTUALIZACION" in col_map:
+                cells_to_update.append(
+                    gspread.Cell(
+                        row=sheet_row_index,
+                        col=col_map["FECHA_ACTUALIZACION"],
+                        value=current_date,
                     )
                 )
 
         if cells_to_update:
             worksheet.update_cells(cells_to_update, value_input_option="USER_ENTERED")
-            print("¡Google Sheet actualizado exitosamente!")
+            print(
+                f"¡Google Sheet actualizado exitosamente! Se modificaron {len(results_df)} filas."
+            )
+
     except Exception as e:
         print(f"Ocurrió un error al actualizar Google Sheets: {e}")
