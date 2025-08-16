@@ -6,12 +6,16 @@ load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 CX_ID = os.getenv("CX_ID")
+
+SHEET_INDEX = 1
 SHEET_NAME = "TEST_SCRAPING"
+PROCESSING_LIMIT = 200
 COLUMNS = [
     "ID_EMPRESA",
     "CUIT",
     "NOMBRE_ESTABLECIMIENTO",
     "NOMBRE_COMERCIAL",
+    "WEB",
     "TELEFONO",
     "TELEFONO_2",
     "TELEFONO_3",
@@ -19,6 +23,7 @@ COLUMNS = [
     "DIRECCION",
     "LOCALIDAD",
     "PROVINCIA",
+    "PAIS",
     "LATITUD",
     "LONGITUD",
     "URL_Gmaps",
