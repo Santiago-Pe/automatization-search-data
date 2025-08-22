@@ -16,6 +16,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.ruff_cache/
+
 
 # Archivos de caché del proyecto
 # Como el archivo de caché que discutimos para optimizar costos.

@@ -101,3 +101,21 @@ def search_web_fallback(query):
     except Exception as e:
         print(f"  -> Error en API de Custom Search: {e}")
         return None
+
+
+# ===================================================================
+# Funciones por columna
+# ===================================================================
+
+# def search_cuit():
+# def search_razon_social():
+# def search_direccion()
+# def search_localidad()
+# def search_provincia()
+# def search_pais()
+# def search_web()
+# def search_telefono()
+# def search_email()
+# def search_latitud()
+# def search_longitud()
+# def search_url_gmaps()
