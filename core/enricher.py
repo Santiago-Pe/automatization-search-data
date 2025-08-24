@@ -1,8 +1,7 @@
 # core/enricher.py
 import time
 import pandas as pd
-from services import google_sheets, free_search, pay_search
-from config.config import CRITICAL_DATA
+from services import google_sheets, free_search
 
 
 def run_enrichment_process(worksheet, limit):
@@ -49,53 +48,53 @@ def run_enrichment_process(worksheet, limit):
             profile.update(free_search.get_maps_data(query_name))
 
         # --- FASE 2: ENRIQUECIMIENTO CON APIS ---
-        missing_data = [key for key in CRITICAL_DATA if not profile.get(key)]
+        # missing_data = [key for key in CRITICAL_DATA if not profile.get(key)]
 
-        if missing_data:
-            print(f"  -> Faltan datos críticos: {missing_data}. Iniciando Fase 2...")
+        # if missing_data:
+        #     print(f"  -> Faltan datos críticos: {missing_data}. Iniciando Fase 2...")
 
-            # Prioridad 1: Places API
-            if any(
-                k in missing_data for k in ["LATITUD", "TELEFONO", "DIRECCION", "WEB"]
-            ):
-                places_data = pay_search.get_data_with_places(query_name)
-                for key, value in places_data.items():
-                    if not profile.get(key):
-                        profile[key] = value
+        #     # Prioridad 1: Places API
+        #     if any(
+        #         k in missing_data for k in ["LATITUD", "TELEFONO", "DIRECCION", "WEB"]
+        #     ):
+        #         places_data = pay_search.get_data_with_places(query_name)
+        #         for key, value in places_data.items():
+        #             if not profile.get(key):
+        #                 profile[key] = value
 
-                # ### CORRECCIÓN CLAVE ###
-                # Si Places encontró una WEB y todavía no tenemos EMAIL, la scrapeamos.
-                if profile.get("WEB") and not profile.get("EMAIL"):
-                    print(
-                        "    -> URL encontrada con Places. Intentando scraping de contactos..."
-                    )
-                    profile.update(free_search.get_contactos_from_web(profile["WEB"]))
+        #         # ### CORRECCIÓN CLAVE ###
+        #         # Si Places encontró una WEB y todavía no tenemos EMAIL, la scrapeamos.
+        #         if profile.get("WEB") and not profile.get("EMAIL"):
+        #             print(
+        #                 "    -> URL encontrada con Places. Intentando scraping de contactos..."
+        #             )
+        #             profile.update(free_search.get_contactos_from_web(profile["WEB"]))
 
-            missing_data = [key for key in CRITICAL_DATA if not profile.get(key)]
+        #     missing_data = [key for key in CRITICAL_DATA if not profile.get(key)]
 
-            # Prioridad 2: Gemini API
-            if "WEB" in missing_data:
-                gemini_res = pay_search.get_data_with_gemini(query_name, ["WEB"])
-                if gemini_res and gemini_res.get("WEB"):
-                    profile["WEB"] = gemini_res["WEB"]
-                    # Si Gemini encontró una WEB y no tenemos EMAIL, la scrapeamos.
-                    if not profile.get("EMAIL"):
-                        print(
-                            "    -> URL encontrada con Gemini. Intentando scraping de contactos..."
-                        )
-                        profile.update(
-                            free_search.get_contactos_from_web(profile["WEB"])
-                        )
+        #     # Prioridad 2: Gemini API
+        #     if "WEB" in missing_data:
+        #         gemini_res = pay_search.get_data_with_gemini(query_name, ["WEB"])
+        #         if gemini_res and gemini_res.get("WEB"):
+        #             profile["WEB"] = gemini_res["WEB"]
+        #             # Si Gemini encontró una WEB y no tenemos EMAIL, la scrapeamos.
+        #             if not profile.get("EMAIL"):
+        #                 print(
+        #                     "    -> URL encontrada con Gemini. Intentando scraping de contactos..."
+        #                 )
+        #                 profile.update(
+        #                     free_search.get_contactos_from_web(profile["WEB"])
+        #                 )
 
-            # Prioridad 3: Custom Search API
-            if not profile.get("WEB"):
-                profile["WEB"] = pay_search.get_web_with_custom_search(query_name)
-                # Si Custom Search encontró una WEB y no tenemos EMAIL, la scrapeamos.
-                if profile.get("WEB") and not profile.get("EMAIL"):
-                    print(
-                        "    -> URL encontrada con Custom Search. Intentando scraping de contactos..."
-                    )
-                    profile.update(free_search.get_contactos_from_web(profile["WEB"]))
+        #     # Prioridad 3: Custom Search API
+        #     if not profile.get("WEB"):
+        #         profile["WEB"] = pay_search.get_web_with_custom_search(query_name)
+        #         # Si Custom Search encontró una WEB y no tenemos EMAIL, la scrapeamos.
+        #         if profile.get("WEB") and not profile.get("EMAIL"):
+        #             print(
+        #                 "    -> URL encontrada con Custom Search. Intentando scraping de contactos..."
+        #             )
+        #             profile.update(free_search.get_contactos_from_web(profile["WEB"]))
 
         all_results.append(profile)
         time.sleep(2)
