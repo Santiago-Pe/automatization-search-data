@@ -1,10 +1,11 @@
-# services/paid_search.py
+# services/pay_search.py
 import requests
 import google.generativeai as genai
 from googleapiclient.discovery import build
 from config.config import GOOGLE_API_KEY, CX_ID
 import os
 import json
+import re
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
@@ -42,14 +43,26 @@ def get_data_with_places(query):
 
 
 def get_data_with_gemini(query, data_needed):
-    """Prioridad 2 (API): Usa Gemini para buscar datos específicos faltantes."""
+    """Prioridad 2 (API): Usa Gemini y extrae el JSON de forma robusta."""
     print(f"    -> [API de Pago] Consultando a Gemini por: {data_needed}")
     try:
         model = genai.GenerativeModel("gemini-1.5-pro-latest")
-        prompt = f"Para la empresa '{query}', necesito los siguientes datos: {', '.join(data_needed)}. Devuelve el resultado en formato JSON. Si no encuentras un dato, usa null."
+        prompt = f"Para la empresa '{query}', necesito los siguientes datos: {', '.join(data_needed)}. Devuelve el resultado en un único bloque de código JSON. Si no encuentras un dato, usa null."
         response = model.generate_content(prompt)
-        cleaned_response = response.text.strip().replace("`", "").replace("json", "")
-        return json.loads(cleaned_response)
+
+        # ### CORRECCIÓN CLAVE: Buscamos el bloque JSON en la respuesta ###
+        # Esto nos protege de texto extra como "Aquí tienes:" o markdown ```json
+        json_match = re.search(r"\{.*\}", response.text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(0)
+            return json.loads(json_str)
+        else:
+            print("      -> No se encontró un JSON válido en la respuesta de Gemini.")
+            return {}
+
+    except json.JSONDecodeError as e:
+        print(f"      -> Error al decodificar JSON de Gemini: {e}")
+        return {}
     except Exception as e:
         print(f"      -> Error en API de Gemini: {e}")
         return {}
