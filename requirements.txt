@@ -1,7 +1,46 @@
-gspread
-pandas
-google-api-python-client
-requests
-beautifulsoup4
-python-dotenv
-google-generativeai
+# requirements.txt - DEPENDENCIAS ACTUALIZADAS Y AMPLIADAS
+
+# === CORE DEPENDENCIES ===
+gspread>=5.12.0
+pandas>=2.0.0
+google-api-python-client>=2.100.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+python-dotenv>=1.0.0
+
+# === NUEVAS DEPENDENCIAS PARA MEJORAS ===
+# Reintentos robustos y manejo de errores
+tenacity>=8.2.0
+
+# Logging avanzado (opcional, Python ya tiene logging básico)
+structlog>=23.1.0
+
+# Parsing de URLs y validaciones
+validators>=0.22.0
+
+# Manejo de fechas y tiempo
+python-dateutil>=2.8.2
+
+# Para análisis de texto más avanzado (opcional)
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.21.0
+
+# === DEPENDENCIAS OPCIONALES PARA APIs PAGAS ===
+# (Comentadas para no instalar por defecto)
+# google-generativeai>=0.3.0  # Para Gemini AI
+# openai>=1.0.0               # Para OpenAI como alternativa
+
+# === DESARROLLO Y TESTING ===
+# (Solo instalar en desarrollo)
+# pytest>=7.4.0
+# pytest-mock>=3.11.0
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.5.0
+
+# === DEPENDENCIAS DEL SISTEMA ===
+# Estas ya están incluidas en Python 3.8+ pero las especificamos por compatibilidad
+urllib3>=1.26.0
+certifi>=2023.0.0
+charset-normalizer>=3.2.0
+idna>=3.4
